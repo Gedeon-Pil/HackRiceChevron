@@ -28,7 +28,7 @@ def parse_date(date_str):
     return day, month, year
 
 def distance(location1, location2):
-    return Math.sqrt((location1[0] - location2[0]) ** 2 + (location1[1] - location2[1]) ** 2)
+    return int(80 * Math.sqrt((location1[0] - location2[0]) ** 2 + (location1[1] - location2[1]) ** 2))
 
 
 class Time:
@@ -63,9 +63,14 @@ class Time:
 
         return Time(resultant_hours, resultant_minutes)
 
+    def copy(self):
+        return Time(self.hour, self.minutes)
 
     def greater(self, other):
         return self.get_time() > other.get_time()
+
+    def equals(self, other):
+        return self.get_time() == other.get_time()
 
     def get_time(self):
         return self.hour, self.minutes
@@ -76,6 +81,13 @@ class Time:
     def get_minutes(self):
         return self.minutes
 
+ZERO_TIME = Time(0, 0)
+MORNING_STARTIME = Time(4, 0)
+MORNING_ENDTIME = Time(14, 0)
+EVENING_STARTIME = Time(14, 0)
+EVENING_ENDTIME = Time(24, 0)
+
+SHIFTS = {"Morning" : (MORNING_STARTIME, MORNING_ENDTIME), "Evening" : (EVENING_STARTIME), EVENING_ENDTIME)}
 
 class Schedule:
 
@@ -99,9 +111,9 @@ class Schedule:
         else:
             last_end_time = self.begin_shift
 
-        travel_distance = int(80 * distance(current_location, order_location))
+        travel_distance = distance(current_location, order_location)
 
-        movement_time = Time(0, travel_distance * 2)
+        travel_time = Time(0, 2 * travel_time)
 
         start_time = last_end_time.add(movement_time)
 
@@ -114,7 +126,7 @@ class Schedule:
             overflow_time = time.subtract(remaining_time)
             self.schedule[0].append((order, start_time, self.end_shift))
             day = 1
-            while overflow_time > 0:
+            while overflow_time.greater(ZERO_TIME):
 
                 if overflow_time.greater(self.shift_time):
                     self.schedule[day].append((order, self.begin_shift, self.end_shift))
@@ -122,13 +134,25 @@ class Schedule:
 
                 else:
                     self.schedule[day].append((order, self.begin_shift, self.begin_shift.add(overflow_time)))
-                    overflow_time = 0
+                    overflow_time = ZERO_TIME
 
         return True
 
 
     def is_available(self):
         return self.schedule_days < 2
+
+    def get_next_start_time(self, current_location, order_location):
+
+        travel_distance = distance(current_location, order_location)
+
+        travel_time = Time(0, 2 * travel_time)
+
+        if not self.schedule[0]:
+            return self.begin_shift.add(travel_time)
+
+        return self.schedule[0][-1][2].add(travel_time)
+
 
     def get_time_remaining(self):
         if not self.schedule[0]:
@@ -145,19 +169,100 @@ class Facility_Schedule:
 
     def __init__(self, max_capacity):
 
+        self.daytime = EVENING_ENDTIME.subtract(MORNING_STARTIME)
         self.schedule = list()
         self.schedule.append(list())
+        self.schedule[0].append((0, EVENING_ENDTIME))
         self.max_capacity = max_capacity
 
-    def add_task(self, order, begin_time, end_time):
+    def get_start_times(self, duration):
+
+        valid_intervals = []
+        is_valid = False
+        start_time = None
+        prev_endtime = Time(MORNING_STARTIME, 0)
+
+        for capacity, end_time in self.schedule[0]:
+            if is_valid and capacity >= max_capacity:
+                valid_intervals.append((start_time, prev_endtime))
+                is_valid = False
+            if not is_valid and capacity < max_capacity:
+                start_time = prev_endtime
+
+            prev_endtime = end_time
+
+        if is_valid:
+            valid_intervals.append((start_time, prev_endtime))
+
+        valid_start_times = []
+        for start_time, end_time in valid_intervals:
+            if end_time.subtract(start_time).greater(duration):
+                valid_start_times.append((start_time, end_time.subtract(duration)))
 
 
+    def add_task(self, order, start_time, time):
 
+        end_time = start_time.add(time)
 
+        index = 0
+        start_index = -1
+        while index < len(self.schedule[0]):
+            capacity, end_interval = self.schedule[0][index]
+            if end_interval.greater(start_time):
+                start_index = index
+                break
+            index += 1
 
+        index = start_index
+        while index < len(self.schedule[0]):
+            capacity, end_interval = self.schedule[0][index]
+            if capcity == self.max_capacity:
+                return False
+            if end_interval.greater(end_time):
+                break
 
+            index += 1
 
-SHIFTS = {"Morning" : (Time(4, 0), Time(14, 0)), "Evening" : (Time(14, 0), Time(23, 0))}
+        end_index = index
+
+        new_schedule = list()
+
+        if start_index != -1:
+            for index in range(start_index + 1):
+                capacity, end_interval = self.schedule[0][index]
+                new_schedule.append((capacity, end_interval.copy()))
+
+        if not start_time.equals(self.schedule[0][start_index]):
+            new_schedule.append((capacity + 1, start_time))
+
+        for index in range(start_index + 1, end_index):
+            capacity, end_interval = self.schedule[0][index]
+            new_schedule.append((capacity + 1, end_interval.copy()))
+
+        if not end_time.greater(EVENING_ENDTIME):
+            if not end_time.equals(self.schedule[0][end_index - 1]):
+                new_schedule.append((capacity, end_time))
+
+            for index in range(end_index, len(self.schedule[0])):
+                capacity, end_interval = self.schedule[0][index]
+                new_schedule.append((capacity, end_interval.copy()))
+
+        else:
+
+            self.schedule[0] = new_schedule
+            overflow_time = end_time.subtract(EVENING_ENDTIME)
+
+            while overflow_time.greater(ZERO_TIME):
+                self.schedule.append(list())
+                if overflow_time.greater(self.daytime):
+                    self.schedule[-1].append((1, EVENING_ENDTIME))
+                    overflow_time = overflow_time.subtract(daytime)
+                else:
+                    self.schedule[-1].append((1, MORNING_STARTIME.add(overflow_time)))
+                    overflow_time = ZERO_TIME
+
+        return True
+
 
 class Read_Data():
 
@@ -317,6 +422,8 @@ class Facility():
         self.longitude = facility_fields["longitude"]
         self.occupancy = facility_fields["occupancy"]
 
+        self.schedule = Facility_Schedule(self.occupancy)
+
     def get_key(self):
         return self.key
 
@@ -328,6 +435,9 @@ class Facility():
 
     def get_occupancy(self):
         return self.occupancy
+
+    def get_schedule(self):
+        return self.schedule
 
 
 class Order():

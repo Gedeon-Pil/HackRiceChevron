@@ -12,6 +12,7 @@ class Delegate_Tasks:
         self.daily_orders = self.data.get_all_daily_orders()
         self.heap = list()
         self.workers = self.data.get_all_workers()
+        self.facilities = self.data.get_all_facilities()
 
 
     def generate_schedule(self):
@@ -25,10 +26,11 @@ class Delegate_Tasks:
             available_workers = {key : worker for key, worker in self.workers.items() if worker.get_schedule().is_available()}
             new_orders = self.daily_orders[current_day]
             new_order_priorities = [(order.get_priority(), key) for key, order in new_orders.items()]
-            for order in new_order_priorities:
-                heapq.heappush(self.heap, order)
+            for priority, order in new_order_priorities:
+                heapq.heappush(self.heap, (-1 * priority, order))
 
             print("Orders at beginning of day: %d" % len(self.heap))
+            print(self.heap)
 
             employee_capabilites = dict()
             for key in available_workers:
@@ -39,6 +41,8 @@ class Delegate_Tasks:
             while temp_heap:
                 qualified_workers = set()
                 priority, order_key = heapq.heappop(temp_heap)
+                priority *= -1
+
                 order = self.data.get_order(order_key)
                 order_type = order.get_type()
                 for key, worker in available_workers.items():
@@ -52,7 +56,10 @@ class Delegate_Tasks:
 
             while True:
 
+                print(order_key)
                 priority, order_key = heapq.heappop(self.heap)
+                priority *= -1
+
                 order = self.data.get_order(order_key)
                 completion_time = Time(order.get_completion_time(), 0)
 
@@ -64,6 +71,7 @@ class Delegate_Tasks:
                 candidate = None
                 max_time_remaining = ZERO_TIME
                 min_max_priority_alternate = float('inf')
+
                 for key in qualified_workers:
                     worker = self.data.get_worker(key)
                     if len(employee_capabilites[key]) == 1:
@@ -87,7 +95,9 @@ class Delegate_Tasks:
                     next_available_time = schedule.get_next_start_time(worker.get_location(), facility.get_location())
 
                     under_capacity = False
+
                     for start_time in start_times:
+
                         if start_time[0].get_time() <= next_available_time.get_time() <= start_time[1].get_time():
                             under_capacity = True
                             break
@@ -99,10 +109,10 @@ class Delegate_Tasks:
                                 employee_capabilites.remove(candidate)
 
                     else:
-                        unclaimed_orders.append((priority, order_key))
+                        unclaimed_orders.append((-1 * priority, order_key))
 
                 else:
-                    unclaimed_orders.append((priority, order_key))
+                    unclaimed_orders.append((-1 * priority, order_key))
 
 
                 order_capabilities.pop(order_key, None)
@@ -129,21 +139,34 @@ class Delegate_Tasks:
                 schedule = worker.get_schedule()
                 schedule.print_today()
                 worker.get_schedule().update()
-                print('')
+                print("")
+
+            for facility in self.facilities.values():
+                facility_schedule = facility.get_schedule()
+                facility_schedule.update()
 
             current_day += 1
 
             print("Orders at end of day: %d" % len(self.heap))
-
-        print(self.heap)
+            print(self.heap)
 
 
     def daily_schedule(self, greedy):
             pass
 
+    def get_all_schedules(self):
+        master_dict = dict()
+        for worker in self.workers.values():
+            schedule = worker.get_schedule()
+            master_dict[worker.get_key()] = schedule.get_running_schedule()
+
+        return master_dict
+
+
 def main():
     framework = Delegate_Tasks()
     framework.generate_schedule()
+    master_scheduler = framework.get_all_schedules()
 
 if __name__ == '__main__':
     main()

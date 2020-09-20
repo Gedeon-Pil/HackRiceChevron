@@ -233,9 +233,14 @@ class Facility_Schedule:
         valid_start_times = []
         for start_time, end_time in valid_intervals:
 
-            if end_time.subtract(start_time).greater(duration):
-                valid_start_times.append((start_time, end_time.subtract(duration)))
+            if end_time.equals(EVENING_ENDTIME) and not start_time.equals(EVENING_ENDTIME):
+                valid_start_times.append((start_time, EVENING_ENDTIME))
 
+            elif MORNING_ENDTIME.greater(start_time) and not MORNING_ENDTIME.greater(end_time):
+                if not end_time.subtract(duration).greater(start_time) or not end_time.subtract(duration).greater(MORNING_ENDTIME):
+                    valid_start_times.append((start_time, MORNING_ENDTIME))
+                else:
+                    valid_start_times.append((start_time, end_time.subtract(duration)))
 
 
         return valid_start_times
@@ -250,21 +255,23 @@ class Facility_Schedule:
         while index < len(self.schedule[0]):
             capacity, end_interval = self.schedule[0][index]
             if end_interval.greater(start_time):
-                start_index = index
+                start_index = index - 1
                 break
             index += 1
 
-        index = start_index
+        index = start_index + 1
         while index < len(self.schedule[0]):
             capacity, end_interval = self.schedule[0][index]
-            if capcity == self.max_capacity:
+            if capacity == self.max_capacity:
                 return False
             if end_interval.greater(end_time):
+                end_index = index
                 break
 
             index += 1
 
-        end_index = index
+        if index == len(self.schedule[0]):
+            end_index = index
 
         new_schedule = list()
 
@@ -273,38 +280,43 @@ class Facility_Schedule:
                 capacity, end_interval = self.schedule[0][index]
                 new_schedule.append((capacity, end_interval.copy()))
 
-        if not start_time.equals(self.schedule[0][start_index]):
-            new_schedule.append((capacity + 1, start_time))
+        if not start_time.equals(self.schedule[0][start_index][1]):
+            capacity, end_interval = self.schedule[0][start_index + 1]
+            new_schedule.append((capacity, start_time))
+
 
         for index in range(start_index + 1, end_index):
             capacity, end_interval = self.schedule[0][index]
             new_schedule.append((capacity + 1, end_interval.copy()))
 
-        if not end_time.greater(EVENING_ENDTIME):
-            if not end_time.equals(self.schedule[0][end_index - 1]):
-                new_schedule.append((capacity, end_time))
+        if end_index == len(self.schedule[0]):
+
+            if not end_time.equals(EVENING_ENDTIME):
+                overflow_time = end_time.subtract(EVENING_ENDTIME)
+
+                day = 1
+                while overflow_time.greater(ZERO_TIME):
+                    if day >= len(self.schedule):
+                        self.schedule.append(list())
+                    if overflow_time.greater(self.daytime):
+                        self.schedule[day].append((1, EVENING_ENDTIME))
+                        overflow_time = overflow_time.subtract(daytime)
+                    else:
+                        self.schedule[day].append((1, MORNING_STARTIME.add(overflow_time)))
+                        self.schedule[day].append((0, EVENING_ENDTIME))
+                        overflow_time = ZERO_TIME
+                    day += 1
+
+        else:
+            if not end_time.equals(self.schedule[0][end_index - 1][1]):
+                capacity, end_interval = self.schedule[0][end_index]
+                new_schedule.append((capacity + 1, end_time))
 
             for index in range(end_index, len(self.schedule[0])):
                 capacity, end_interval = self.schedule[0][index]
                 new_schedule.append((capacity, end_interval.copy()))
 
-        else:
-
-            self.schedule[0] = new_schedule
-            overflow_time = end_time.subtract(EVENING_ENDTIME)
-
-            day = 1
-            while overflow_time.greater(ZERO_TIME):
-                if day >= len(self.schedule):
-                    self.schedule.append(list())
-                if overflow_time.greater(self.daytime):
-                    self.schedule[day].append((1, EVENING_ENDTIME))
-                    overflow_time = overflow_time.subtract(daytime)
-                else:
-                    self.schedule[day].append((1, MORNING_STARTIME.add(overflow_time)))
-                    self.schedule[day].append((0, EVENING_ENDTIME))
-                    overflow_time = ZERO_TIME
-                day += 1
+        self.schedule[0] = new_schedule
 
         return True
 
@@ -313,6 +325,12 @@ class Facility_Schedule:
         if not self.schedule:
             self.schedule.append(list())
             self.schedule[0].append((0, EVENING_ENDTIME))
+
+    def print_today(self):
+        for order_information in self.schedule[0]:
+            capacity, end_interval = order_information
+            print(capacity, end_interval.get_time())
+
 
 
 class Read_Data():
@@ -622,6 +640,30 @@ class Data():
 def main():
     data = Data()
     print(data.get_worker("Bob").get_certifications())
+
+def test():
+    facility = Facility('fac0', {'latitude' : 20, 'longitude' : 20, "occupancy" : 2})
+    schedule = facility.get_schedule()
+    start_times = schedule.get_start_times(Time(8, 0))
+    print(start_times[0][0].get_time(), start_times[0][1].get_time())
+
+    schedule.update()
+    start_times = schedule.get_start_times(Time(2, 0))
+    print(start_times[0][0].get_time(), start_times[0][1].get_time())
+
+    order = Order(1000, {"facility" : "fac0", "type" : "pump", "id" : "xx", "priority" : 5, "completion_time" : 10, "submission_time" : "NANA"})
+
+    schedule.print_today()
+    print('\n')
+
+    schedule.add_task(order, Time(5, 0), Time(2, 0))
+    schedule.add_task(order, Time(5, 0), Time(2, 0))
+
+    start_times = schedule.get_start_times(Time(8, 0))
+    schedule.print_today()
+
+    print(start_times[0][0].get_time(), start_times[0][1].get_time())
+
 
 if __name__ == '__main__':
     main()

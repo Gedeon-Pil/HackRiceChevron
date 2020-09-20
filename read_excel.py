@@ -93,37 +93,36 @@ class Schedule:
 
     def __init__(self, begin_shift, end_shift, default_location):
 
-
         self.begin_shift = begin_shift
         self.end_shift = end_shift
         self.shift_time = self.end_shift.subtract(self.begin_shift)
         self.schedule = list()
         self.schedule.append(list())
-        self.schedule_days = 0
+        self.days_scheduled = 0
         self.default_location = default_location
         self.recent_location = default_location
+        self.running_schedule = list()
 
     def add_task(self, order, time, order_location):
 
         if not self.is_available():
             return False
 
-        if self.schedule_days == 1:
-            last_end_time = self.schedule[0][-1][2] + movement_time
-
+        if self.schedule[0]:
+            last_end_time = self.schedule[0][-1][2]
+            travel_distance = distance(self.recent_location, order_location)
+            travel_time = Time(0, 2 * travel_distance)
+            start_time = last_end_time.add(travel_time)
         else:
-            last_end_time = self.begin_shift
-
-        travel_distance = distance(self.recent_location, order_location)
-
-        travel_time = Time(0, 2 * travel_distance)
-
-        start_time = last_end_time.add(travel_time)
+            start_time = self.begin_shift
 
         remaining_time = self.end_shift.subtract(start_time)
+        if remaining_time == -1:
+            return False
 
         if not time.greater(remaining_time):
             self.schedule[0].append((order, start_time, start_time.add(time)))
+            self.days_scheduled = 1
 
         else:
             overflow_time = time.subtract(remaining_time)
@@ -132,12 +131,16 @@ class Schedule:
             while overflow_time.greater(ZERO_TIME):
                 if day >= len(self.schedule):
                     self.schedule.append(list())
+
                 if overflow_time.greater(self.shift_time):
                     self.schedule[day].append((order, self.begin_shift, self.end_shift))
                     overflow_time = overflow_time.subtract(self.shift_time)
+                    self.days_scheduled = day
+
                 else:
                     self.schedule[day].append((order, self.begin_shift, self.begin_shift.add(overflow_time)))
                     overflow_time = ZERO_TIME
+
                 day += 1
 
         self.recent_location = order_location
@@ -146,7 +149,7 @@ class Schedule:
 
 
     def is_available(self):
-        return self.schedule_days < 2
+        return self.days_scheduled < 2
 
     def get_next_start_time(self, current_location, order_location):
 
@@ -166,10 +169,26 @@ class Schedule:
             return self.end_shift.subtract(self.schedule[0][-1][2])
 
     def update(self):
+        daily_schedule = list()
+        for order_info in self.schedule[0]:
+            order, start_time, end_time = order_info
+            hour_start_time, minutes_start_time = start_time.get_time()
+            hour_end_time, minutes_end_time = end_time.get_time()
+
+            daily_schedule.append([order.get_key(), order.get_facility(), hour_start_time, minutes_start_time, hour_end_time, minutes_end_time])
+
+        self.running_schedule.append(daily_schedule)
+
+
         self.schedule.pop(0)
         if not self.schedule:
             self.schedule.append(list())
         self.recent_location = self.default_location
+        self.days_scheduled -= 1
+
+    def get_running_schedule(self):
+        return self.running_schedule
+
 
     def get_recent_location(self):
         return self.recent_location
@@ -178,6 +197,7 @@ class Schedule:
         for order_information in self.schedule[0]:
             order, start_time, end_time = order_information
             print(order.get_key(), start_time.get_time(), end_time.get_time())
+
 
 
 class Facility_Schedule:
@@ -215,6 +235,8 @@ class Facility_Schedule:
 
             if end_time.subtract(start_time).greater(duration):
                 valid_start_times.append((start_time, end_time.subtract(duration)))
+
+
 
         return valid_start_times
 
@@ -280,10 +302,17 @@ class Facility_Schedule:
                     overflow_time = overflow_time.subtract(daytime)
                 else:
                     self.schedule[day].append((1, MORNING_STARTIME.add(overflow_time)))
+                    self.schedule[day].append((0, EVENING_ENDTIME))
                     overflow_time = ZERO_TIME
                 day += 1
 
         return True
+
+    def update(self):
+        self.schedule.pop(0)
+        if not self.schedule:
+            self.schedule.append(list())
+            self.schedule[0].append((0, EVENING_ENDTIME))
 
 
 class Read_Data():

@@ -28,7 +28,7 @@ def parse_date(date_str):
     return day, month, year
 
 def distance(location1, location2):
-    return int(80 * Math.sqrt((location1[0] - location2[0]) ** 2 + (location1[1] - location2[1]) ** 2))
+    return int(80 * math.sqrt((location1[0] - location2[0]) ** 2 + (location1[1] - location2[1]) ** 2))
 
 
 class Time:
@@ -48,7 +48,7 @@ class Time:
         return Time(self.hour + added_hours, self.minutes + added_minutes)
 
     def subtract(self, other):
-        if not self.greater(other):
+        if not self.greater(other) and not self.equals(other):
             return -1
 
         other_hour = other.get_hour()
@@ -87,11 +87,12 @@ MORNING_ENDTIME = Time(14, 0)
 EVENING_STARTIME = Time(14, 0)
 EVENING_ENDTIME = Time(24, 0)
 
-SHIFTS = {"Morning" : (MORNING_STARTIME, MORNING_ENDTIME), "Evening" : (EVENING_STARTIME), EVENING_ENDTIME)}
+SHIFTS = {"Morning" : (MORNING_STARTIME, MORNING_ENDTIME), "Evening" : (EVENING_STARTIME, EVENING_ENDTIME)}
 
 class Schedule:
 
-    def __init__(self, begin_shift, end_shift):
+    def __init__(self, begin_shift, end_shift, default_location):
+
 
         self.begin_shift = begin_shift
         self.end_shift = end_shift
@@ -99,10 +100,12 @@ class Schedule:
         self.schedule = list()
         self.schedule.append(list())
         self.schedule_days = 0
+        self.default_location = default_location
+        self.recent_location = default_location
 
-    def add_task(self, order, time, current_location, order_location):
+    def add_task(self, order, time, order_location):
 
-        if not self.available:
+        if not self.is_available():
             return False
 
         if self.schedule_days == 1:
@@ -111,11 +114,11 @@ class Schedule:
         else:
             last_end_time = self.begin_shift
 
-        travel_distance = distance(current_location, order_location)
+        travel_distance = distance(self.recent_location, order_location)
 
-        travel_time = Time(0, 2 * travel_time)
+        travel_time = Time(0, 2 * travel_distance)
 
-        start_time = last_end_time.add(movement_time)
+        start_time = last_end_time.add(travel_time)
 
         remaining_time = self.end_shift.subtract(start_time)
 
@@ -127,14 +130,17 @@ class Schedule:
             self.schedule[0].append((order, start_time, self.end_shift))
             day = 1
             while overflow_time.greater(ZERO_TIME):
-
+                if day >= len(self.schedule):
+                    self.schedule.append(list())
                 if overflow_time.greater(self.shift_time):
                     self.schedule[day].append((order, self.begin_shift, self.end_shift))
                     overflow_time = overflow_time.subtract(self.shift_time)
-
                 else:
                     self.schedule[day].append((order, self.begin_shift, self.begin_shift.add(overflow_time)))
                     overflow_time = ZERO_TIME
+                day += 1
+
+        self.recent_location = order_location
 
         return True
 
@@ -144,12 +150,11 @@ class Schedule:
 
     def get_next_start_time(self, current_location, order_location):
 
-        travel_distance = distance(current_location, order_location)
-
-        travel_time = Time(0, 2 * travel_time)
-
         if not self.schedule[0]:
-            return self.begin_shift.add(travel_time)
+            return self.begin_shift
+
+        travel_distance = distance(current_location, order_location)
+        travel_time = Time(0, 2 * travel_distance)
 
         return self.schedule[0][-1][2].add(travel_time)
 
@@ -164,6 +169,16 @@ class Schedule:
         self.schedule.pop(0)
         if not self.schedule:
             self.schedule.append(list())
+        self.recent_location = self.default_location
+
+    def get_recent_location(self):
+        return self.recent_location
+
+    def print_today(self):
+        for order_information in self.schedule[0]:
+            order, start_time, end_time = order_information
+            print(order.get_key(), start_time.get_time(), end_time.get_time())
+
 
 class Facility_Schedule:
 
@@ -180,14 +195,15 @@ class Facility_Schedule:
         valid_intervals = []
         is_valid = False
         start_time = None
-        prev_endtime = Time(MORNING_STARTIME, 0)
+        prev_endtime = MORNING_STARTIME
 
         for capacity, end_time in self.schedule[0]:
-            if is_valid and capacity >= max_capacity:
+            if is_valid and capacity >= self.max_capacity:
                 valid_intervals.append((start_time, prev_endtime))
                 is_valid = False
-            if not is_valid and capacity < max_capacity:
+            if not is_valid and capacity < self.max_capacity:
                 start_time = prev_endtime
+                is_valid = True
 
             prev_endtime = end_time
 
@@ -196,8 +212,11 @@ class Facility_Schedule:
 
         valid_start_times = []
         for start_time, end_time in valid_intervals:
+
             if end_time.subtract(start_time).greater(duration):
                 valid_start_times.append((start_time, end_time.subtract(duration)))
+
+        return valid_start_times
 
 
     def add_task(self, order, start_time, time):
@@ -252,14 +271,17 @@ class Facility_Schedule:
             self.schedule[0] = new_schedule
             overflow_time = end_time.subtract(EVENING_ENDTIME)
 
+            day = 1
             while overflow_time.greater(ZERO_TIME):
-                self.schedule.append(list())
+                if day >= len(self.schedule):
+                    self.schedule.append(list())
                 if overflow_time.greater(self.daytime):
-                    self.schedule[-1].append((1, EVENING_ENDTIME))
+                    self.schedule[day].append((1, EVENING_ENDTIME))
                     overflow_time = overflow_time.subtract(daytime)
                 else:
-                    self.schedule[-1].append((1, MORNING_STARTIME.add(overflow_time)))
+                    self.schedule[day].append((1, MORNING_STARTIME.add(overflow_time)))
                     overflow_time = ZERO_TIME
+                day += 1
 
         return True
 
@@ -274,7 +296,7 @@ class Read_Data():
         self.wb = load_workbook(self.WORKFILE)
 
         self.EQUIPMENT_FIELDS = ["failure", "fix", "fac1", "fac2", "fac3", "fac4", "fac5"]
-        self.WORKER_FIELDS = ["certifications", "shifts", "latitude", "longitude"]
+        self.WORKER_FIELDS = ["certifications", "shifts"]
         self.FACILITY_FIELDS = ["latitude", "longitude", "occupancy"]
         self.ORDER_FIELDS = ["facility", "type", "id", "priority", "completion_time", "submission_time"]
 
@@ -382,17 +404,15 @@ class Equipment():
 
 class Worker():
 
-    def __init__(self, key, worker_fields):
+    def __init__(self, key, worker_fields, default_location):
 
         self.key = key
         certifications = worker_fields["certifications"]
         self.certifications = set(certifications.split(", "))
         self.shifts = worker_fields["shifts"]
-        self.latitude = worker_fields["latitude"]
-        self.longitude = worker_fields["longitude"]
 
         self.start_shift, self.end_shift = SHIFTS[self.shifts]
-        self.schedule = Schedule(self.start_shift, self.end_shift)
+        self.schedule = Schedule(self.start_shift, self.end_shift, default_location)
 
     def get_key(self):
         return self.key
@@ -403,11 +423,8 @@ class Worker():
     def get_shifts(self):
         return self.shifts
 
-    def get_latitude(self):
-        return self.latitude
-
-    def get_longitude(self):
-        return self.longitude
+    def get_location(self):
+        return self.schedule.get_recent_location()
 
     def get_schedule(self):
         return self.schedule
@@ -418,14 +435,17 @@ class Facility():
     def __init__(self, key, facility_fields):
 
         self.key = key
-        self.latitude = facility_fields["latitude"]
-        self.longitude = facility_fields["longitude"]
-        self.occupancy = facility_fields["occupancy"]
+        self.latitude = float(facility_fields["latitude"])
+        self.longitude = float(facility_fields["longitude"])
+        self.occupancy = int(facility_fields["occupancy"])
 
         self.schedule = Facility_Schedule(self.occupancy)
 
     def get_key(self):
         return self.key
+
+    def get_location(self):
+        return self.latitude, self.longitude
 
     def get_latitude(self):
         return self.latitude
@@ -448,8 +468,8 @@ class Order():
         self.facility = order_fields["facility"]
         self.type = order_fields["type"]
         self.id = order_fields["id"]
-        self.priority = order_fields["priority"]
-        self.completion_time = order_fields["completion_time"]
+        self.priority = int(order_fields["priority"])
+        self.completion_time = int(order_fields["completion_time"])
         self.submission_time = order_fields["submission_time"]
 
     def get_key(self):
@@ -493,11 +513,20 @@ class Data():
         for key, equipment_fields in self.equipment_data.items():
             self.equipment_objs[key] = Equipment(key, equipment_fields)
 
-        for key, worker_fields in self.worker_data.items():
-            self.worker_objs[key] = Worker(key, worker_fields)
-
         for key, facility_fields in self.facility_data.items():
             self.facility_objs[key] = Facility(key, facility_fields)
+
+        count = 0
+        sum_latitiudes = 0
+        sum_longitudes = 0
+        for facility in self.facility_objs.values():
+            sum_latitiudes += facility.get_latitude()
+            sum_longitudes += facility.get_longitude()
+            count += 1
+        self.default_location = (sum_latitiudes / count, sum_longitudes / count)
+
+        for key, worker_fields in self.worker_data.items():
+            self.worker_objs[key] = Worker(key, worker_fields, self.default_location)
 
         for key, order_fields in self.order_data.items():
             self.order_objs[key] = Order(key, order_fields)

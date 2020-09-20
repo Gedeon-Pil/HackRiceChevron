@@ -74,9 +74,9 @@ def display_webpage(master_scheduler):
         break
 
     for day in range(length):
-        st.write('\nDay %d\n' % day + 1)
+        st.write("\nDay " + str(day + 1) + ":\n")
         for name, schedules in master_scheduler.items():
-            st.write("\nWorker Name: %s\n" % name)
+            st.write("\nWorker Name: " + str(name) + "\n" % name)
             schedule = schedules[day]
             for order in schedule:
                 st.write()
@@ -104,3 +104,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+

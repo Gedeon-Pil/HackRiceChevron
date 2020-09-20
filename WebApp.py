@@ -1,5 +1,6 @@
 import streamlit as st
 from twilio.rest import Client
+from order_management import *
 
 def runSide():
     
@@ -23,14 +24,14 @@ def runSide():
     st.write(text)
     
 
-def message():
+def message(order_id, facility, start_time_hours, start_time_minutes, end_time_hours, end_time_minutes):
     account_sid = 'AC705f999c86a965d4f4a8db2f4f7fea8b'
     auth_token = '8756cbaaba1036256d0679cbc751d300'
     client = Client(account_sid, auth_token)
 
     message = client.messages \
         .create(
-            body='Put the message here',
+            body='Proceed to '+ facility + " to complete work order " + str(order_id) + " from "+ str(start_time_hours)+ ":" + str(start_time_minutes) + " to " + str(end_time_hours) + ":" + str(end_time_hours)+".",
             from_='+17163174817',
             to='+17158282001'
      )
@@ -38,4 +39,9 @@ def message():
     return(message.sid)
     
     
-runSide()
+def main():
+    framework = Delegate_Tasks()
+    framework.generate_schedule()
+    master_scheduler = framework.get_all_schedules()
+    runSide()
+    

@@ -21,7 +21,7 @@ class Delegate_Tasks:
 
         while current_day < len(self.daily_orders):
 
-            print("DAY ", current_day)
+            print("\nDAY ", current_day)
 
             available_workers = {key : worker for key, worker in self.workers.items() if worker.get_schedule().is_available()}
             new_orders = self.daily_orders[current_day]
@@ -30,7 +30,6 @@ class Delegate_Tasks:
                 heapq.heappush(self.heap, (-1 * priority, order))
 
             print("Orders at beginning of day: %d" % len(self.heap))
-            print(self.heap)
 
             employee_capabilites = dict()
             for key in available_workers:
@@ -56,7 +55,6 @@ class Delegate_Tasks:
 
             while True:
 
-                print(order_key)
                 priority, order_key = heapq.heappop(self.heap)
                 priority *= -1
 
@@ -104,6 +102,8 @@ class Delegate_Tasks:
 
                     if under_capacity and schedule.add_task(order, completion_time, facility.get_location()):
 
+                        facility_schedule.add_task(order, next_available_time, completion_time)
+
                         if not schedule.is_available():
                             if candidate in employee_capabilites:
                                 employee_capabilites.remove(candidate)
@@ -148,8 +148,6 @@ class Delegate_Tasks:
             current_day += 1
 
             print("Orders at end of day: %d" % len(self.heap))
-            print(self.heap)
-
 
     def daily_schedule(self, greedy):
             pass
